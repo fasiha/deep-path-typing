@@ -90,9 +90,13 @@ The `path` function appears to take a dummy object that we pretend is something 
 
 Here's what `path` looks like—
 ```ts
-function path<Target, T extends keyof Word, U extends keyof Word[T] = never, V extends
-                  keyof Word[T][U] = never, W extends keyof Word[T][U][V] = never,
-                                                      X extends keyof Word[T][U][V][W] = never>(
+// 🍌
+function path<Target,
+              T extends keyof Word,
+              U extends keyof Word[T] = never,
+              V extends keyof Word[T][U] = never,
+              W extends keyof Word[T][U][V] = never,
+              X extends keyof Word[T][U][V][W] = never>(
     dummy: Target,
     t: T&(Target extends(Extract<X, string|number> extends never
                          ? Extract<W, string|number> extends never
@@ -113,6 +117,35 @@ function path<Target, T extends keyof Word, U extends keyof Word[T] = never, V e
 ```
 
 ## Discussion
+In studying real and functional analysis, I was frequently disappointed and alarmed at the frequency with which elegant theorems were accompanied by compact proofs. Clearly, the result didn't start out as a cut jewel, and it always felt a bit dishonest that texts didn't acknowledge the failed attempts and blind alleys and surprisingly-insurmountable constraints that no doubt preceded the version they present.
+
+> I often remind myself that Maxwell's equations, which we may have learned as four short vector differential equations that form the bedrock of all of electromagnetics—certainly one of humankind's greatest intellectual achievements—were actually established in that form by Heaviside. Maxwell published *twenty* equations in 3D coordinates. Grotesque!
+
+The `path` function above is no jewel, but I'll try here to summarize the lessons learned coming up with it. It started with [HerringtonDarkholme](https://github.com/Microsoft/TypeScript/issues/12290#issuecomment-260909643)'s 2016 example to staticly-type deep object path getters:
+```ts
+function path2<A extends string, B extends string, C extends string, D>(path: [A, B, C], 
+  d: {[K1 in A]: {[K2 in B]: {[K3 in C]: D}}}) {
+  // ...
+}
+path2(['a', 'b', 'c'], {a: {b: 2}})      // error
+path2(['a', 'b', 'c'], {a: {b: {c: 2}}}) // works
+```
+to which I
+- added a constraint that the type you got when you followed the path was the type you expected, and
+- moved the constraints on the path's generic parameters from outside the generics definition to inside, i.e., inside the `<`brackets`>`.
+
+A surprising constraint in TypeScript is that ***automatic inference of generics parameters is all-or-nothing***, per [niieani](https://stackoverflow.com/a/38688143/500207). My only complaint about my `path` above (🍌) is that I have to give it a dummy unused variable to indicate the type I wanted at the end of the path, i.e., the `{} as Props['sense']` in
+```ts
+path({} as Props['sense'], 'sense', 10)
+```
+It would be so much more ergonomic if I could instead do
+```ts
+path<Props['sense']>('sense', 10)
+```
+but that won't work because currently you'd also have to specify all the other generics parameters (`T`, `U`, et al.). Subscribe to notifications for this ["Proposal: Partial Type Argument Inference"](https://github.com/Microsoft/TypeScript/issues/26242) issue to know when this constraint is relaxed.
+
+
+
 
 ```ts
 
