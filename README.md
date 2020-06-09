@@ -343,12 +343,89 @@ So this infelicity is the third thing I don't like about `path`:
 1. having to pass in a dummy variable as the first argument so the `Target` type can be inferred;
 2. having to manually extend it to work past five levels; and
 3. the type error isn't localized.
-
-## Alternatives
-Here I'll sketch one alternative way to achieve the same goal as `path`. Recall we had this:
+4. A more holistic problem is that we write the following
 ```ts
 export const propsPaths: AllValuesString<Props> = {
   sense: path({} as Props['sense'], 'sense', 10),
   lang: path({} as Props['lang'], 'sense', 10, 'gloss', 40, 'lang'),
 };
+```
+we have to repeat the `sense` and `lang` keys of `Props` twice, that is,
+- `sense: path({} as Props['sense'] // ...` and
+- `lang: path({} as Props['lang'] // ...`.
+
+It would be nice if the paths map knew the target type it had to enforce for each key from `Props` itself.
+
+## Alternatives
+Recall we had this above:
+```ts
+export const propsPaths: AllValuesString<Props> = {
+  sense: path({} as Props['sense'], 'sense', 10),
+  lang: path({} as Props['lang'], 'sense', 10, 'gloss', 40, 'lang'),
+};
+```
+
+Here's a less ergonomic approach whose one saving grace is that you don't need to pass in a dummy argument:
+```ts
+const path1 = ['sense', 10] as const;
+const path2 = ['sense', 40, 'gloss', 10, 'lang'] as const;
+
+export const propsPaths2: AllValuesString<Props> = {
+  sense: pathi<Props['sense'], typeof path1>(path1),
+  lang: pathi<Props['lang'], typeof path2>(path2),
+};
+```
+We provide the new `pathi` function (🍓 below) with
+- two generic parameters:
+  - the target path, and
+  - the path in an array with const assertion, introduced in [3.4](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-3-4.html#const-assertions), as well as
+- the path array as an argument.
+
+This is very unpleasant since it needs you to define beforehand each path array with a const assertion (or duplicate it, as a generic parameter and an argument to `pathi`), but it's needed because the path needs to exist as both a compile-time type as well as a runtime array. Since we're passing in `Target` as a generic parameter, we have to pass in the path as well, since generic parameter type inference is all-or-nothing.
+
+Here's how this works: we need some helper types to deal with the `readonly` qualifier that the const assertion adds to the array—`readonly` prevents it from being destructured as a regular mutable array.
+```ts
+type Writeable<T> = {-readonly[P in keyof T]: T[P]};
+type RoRw<T> = Writeable<T>|Readonly<Writeable<T>>;
+```
+`Writeable` is the opposite of `Readonly`, per [Nitzan Tomer](https://stackoverflow.com/a/43001581/500207). `RoRw` can take an array or a `readonly` array, and permits both mutable and `readonly` versions.
+
+Next we have `pathi` 🍓, which uses 
+- the same tuple technique above from [Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207) to detect if `Target` extends never or not,
+- a lot of `Writeable` and `RoRw` encumberances to make `readonly` and const assertions work, and finally
+- a `PathToType` type that reaches into an arbitrary model with a tuple type and returns the type it finds (or `never` if it can't):
+```ts
+// 🍓
+function pathi<Target, Arr>(path: Arr&(
+    [Target] extends [PathToType<Writeable<Arr>, Word>] ? RoRw<(string | number)[]>: never)) {
+  return path.join('.');
+}
+
+type PathToType<Arr, Model> =
+    Arr extends [infer T]
+    ? (T extends keyof Model ? Model[T] : never)
+    : Arr extends [infer T, infer U]
+      ? (T extends keyof Model ? U extends keyof Model[T] ? Model[T][U] : never : never)
+      : Arr extends [infer T, infer U, infer V]
+        ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? Model[T][U][V] : never : never : never)
+        : Arr extends [infer T, infer U, infer V, infer W]
+          ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : never : never : never : never)
+          : Arr extends [infer T, infer U, infer V, infer W, infer X]
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:never : never : never : never : never)
+            : never;
+
+// Helper type to debug
+type par = PathToType2<Writeable<typeof path2>, Word>;
+type PathToType2<Arr, Model> =
+    Arr extends [infer T]
+    ? (T extends keyof Model ? Model[T] : 'a1')
+    : Arr extends [infer T, infer U]
+      ? (T extends keyof Model ? U extends keyof Model[T] ? Model[T][U] : 'b1' : 'b2')
+      : Arr extends [infer T, infer U, infer V]
+        ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? Model[T][U][V] : 'c1' : 'c2' : 'c3')
+        : Arr extends [infer T, infer U, infer V, infer W]
+          ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : 'd1' : 'd2' : 'd3' : 'd4')
+          : Arr extends [infer T, infer U, infer V, infer W, infer X]
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:'e1' : 'e2' : 'e3' : 'e4' : 'e5')
+            : 'f';
 ```

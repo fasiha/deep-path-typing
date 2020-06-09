@@ -1,4 +1,5 @@
-// Hand-written interfaces for https://github.com/scriptin/jmdict-simplified 3.0.1
+// Hand-written interfaces for
+// https://github.com/scriptin/jmdict-simplified 3.0.1
 export type Tag = string;
 export interface Kanji {
   common: boolean;
@@ -61,53 +62,52 @@ export const propsPaths: AllValuesString<Props> = {
   lang: path({} as Props['lang'], 'sense', 40, 'gloss', 10, 'lang'),
 };
 
-const path1 = ['sense', 10] as ['sense', 10];
-const path2 = ['sense', 10] as const;
+const path1 = ['sense', 10] as const;
+const path2 = ['sense', 40, 'gloss', 10, 'lang'] as const;
 export const propsPaths2: AllValuesString<Props> = {
   sense: pathi<Props['sense'], typeof path1>(path1),
-  lang: path({} as Props['lang'], 'sense', 40, 'gloss', 10, 'lang'),
+  lang: pathi<Props['lang'], typeof path2>(path2),
 };
 
 type Writeable<T> = {
   -readonly[P in keyof T]: T[P]
 };
-type par = PathToType<typeof path1, Word>;
-type PathToType<Arr, Model> =
-    Arr extends [infer T] ? (T extends keyof Model ? Model[T] : never)
-                          : Arr extends [infer T, infer U]
-                                            ? (T extends keyof Model
-                                               ? U extends keyof Model[T] ? Model[T][U] : never
-                                               : never)
-                                            : Arr extends [infer T, infer U, infer V]
-                                                              ? (T extends keyof Model
-                                                                 ? U extends keyof Model[T]
-                                                                 ? V extends keyof Model[T][U]
-                                                                                 ? Model[T][U][V]
-                                                                                 : never
-                                                                 : never
-                                                                 : never)
-                                                              : never;
-type PathToType2<Arr, Model> =
-    Arr extends [infer T]
-                    ? (T extends keyof Model ? Model[T] : ['a', never])
-                    : Arr extends [infer T, infer U]
-                                      ? (T extends keyof Model
-                                         ? U extends keyof Model[T] ? Model[T][U] : ['b1', never]
-                                         : ['b2', never])
-                                      : Arr extends [infer T, infer U, infer V]
-                                                        ? (T extends keyof Model
-                                                           ? U extends keyof Model[T]
-                                                           ? V extends keyof Model[T][U]
-                                                                           ? Model[T][U][V]
-                                                                           : ['c1', never]
-                                                           : ['c2', never]
-                                                           : ['c3', never])
-                                                        : ['d', never];
+type RoRw<T> = Writeable<T>|Readonly<Writeable<T>>;
 
-function pathi<Target, Arr>(
-    path: Arr&([Target] extends [PathToType<Arr, Word>] ? (string | number)[] : never)) {
+function pathi<Target, Arr>(path: Arr&(
+    [Target] extends [PathToType<Writeable<Arr>, Word>] ? RoRw<(string | number)[]>: never)) {
   return path.join('.');
 }
+
+type PathToType<Arr, Model> =
+    Arr extends [infer T]
+    ? (T extends keyof Model ? Model[T] : never)
+    : Arr extends [infer T, infer U]
+      ? (T extends keyof Model ? U extends keyof Model[T] ? Model[T][U] : never : never)
+      : Arr extends [infer T, infer U, infer V]
+        ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? Model[T][U][V] : never : never : never)
+        : Arr extends [infer T, infer U, infer V, infer W]
+          ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : never : never : never : never)
+          : Arr extends [infer T, infer U, infer V, infer W, infer X]
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:never : never : never : never : never)
+            : never;
+
+// Helper type to debug
+type par = PathToType2<Writeable<typeof path2>, Word>;
+type PathToType2<Arr, Model> =
+    Arr extends [infer T]
+    ? (T extends keyof Model ? Model[T] : 'a1')
+    : Arr extends [infer T, infer U]
+      ? (T extends keyof Model ? U extends keyof Model[T] ? Model[T][U] : 'b1' : 'b2')
+      : Arr extends [infer T, infer U, infer V]
+        ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? Model[T][U][V] : 'c1' : 'c2' : 'c3')
+        : Arr extends [infer T, infer U, infer V, infer W]
+          ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : 'd1' : 'd2' : 'd3' : 'd4')
+          : Arr extends [infer T, infer U, infer V, infer W, infer X]
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:'e1' : 'e2' : 'e3' : 'e4' : 'e5')
+            : 'f';
+
+type par = PathToType2<Writeable<typeof path2>, Word>;
 
 function path<Target, T extends keyof Word, U extends keyof Word[T] = never, V extends
                   keyof Word[T][U] = never, W extends keyof Word[T][U][V] = never,
@@ -129,36 +129,3 @@ function path<Target, T extends keyof Word, U extends keyof Word[T] = never, V e
 ) {
   return [t, u, v, w, x].filter(x => typeof x !== 'undefined').join('.');
 }
-
-// DEBUG!
-type PathDebug<Target, T extends keyof Word, U extends keyof Word[T] = never, V extends
-                   keyof Word[T][U] = never, W extends keyof Word[T][U][V] = never,
-                                                       X extends keyof Word[T][U][V][W] = never> =
-    [
-      (Extract<X, string|number> extends never ? Extract<W, string|number> extends never
-       ? Extract<V, string|number> extends never
-       ? Extract<U, string|number> extends never ? Word[T] : Word[T][U]
-       : Word[T][U][V]
-       : Word[T][U][V][W]
-       : Word[T][U][V][W][X]),
-    ];
-type foo = PathDebug<Props['sense'], 'sense', never, never, never, never>;
-type foo2 = PathDebug<Props['sense'], 'id', never, never, never, never>;
-type bar = never extends Props['sense'] ? 1 : 0;
-type bar2 = Props['sense'] extends never ? 1 : 0;
-
-type q = 'id' extends string ? 1 : 0;                            // 1
-type q2 = string extends 'id' ? 1 : 0;                           // 0
-type q3 = never extends(string|number) ? 1 : 0;                  // 1
-type q4 = never extends never ? 1 : 0;                           // 1
-type q5 = (string|number) extends never ? 1 : 0;                 // 0
-type q6 = (string|number) extends 'id' ? 1 : 0;                  // 0 :(
-type q7 = Extract<string, 'id'>;                                 // never
-type q7b = Extract<'id', string|number>;                         // id!!!!!!!!!!!!!!!!!!!!!!!!!
-type q7c = Extract<never, string|number>;                        // never
-type q7b2 = Extract<'id', string|number> extends never ? 1 : 0;  // 0
-type q7c2 = Extract<never, string|number> extends never ? 1 : 0; // 1
-
-type q8 = Extract<never, string>; // never
-type q9 = NonNullable<never>;     // never
-type q10 = NonNullable<string>;   // string
