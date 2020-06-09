@@ -61,6 +61,54 @@ export const propsPaths: AllValuesString<Props> = {
   lang: path({} as Props['lang'], 'sense', 40, 'gloss', 10, 'lang'),
 };
 
+const path1 = ['sense', 10] as ['sense', 10];
+const path2 = ['sense', 10] as const;
+export const propsPaths2: AllValuesString<Props> = {
+  sense: pathi<Props['sense'], typeof path1>(path1),
+  lang: path({} as Props['lang'], 'sense', 40, 'gloss', 10, 'lang'),
+};
+
+type Writeable<T> = {
+  -readonly[P in keyof T]: T[P]
+};
+type par = PathToType<typeof path1, Word>;
+type PathToType<Arr, Model> =
+    Arr extends [infer T] ? (T extends keyof Model ? Model[T] : never)
+                          : Arr extends [infer T, infer U]
+                                            ? (T extends keyof Model
+                                               ? U extends keyof Model[T] ? Model[T][U] : never
+                                               : never)
+                                            : Arr extends [infer T, infer U, infer V]
+                                                              ? (T extends keyof Model
+                                                                 ? U extends keyof Model[T]
+                                                                 ? V extends keyof Model[T][U]
+                                                                                 ? Model[T][U][V]
+                                                                                 : never
+                                                                 : never
+                                                                 : never)
+                                                              : never;
+type PathToType2<Arr, Model> =
+    Arr extends [infer T]
+                    ? (T extends keyof Model ? Model[T] : ['a', never])
+                    : Arr extends [infer T, infer U]
+                                      ? (T extends keyof Model
+                                         ? U extends keyof Model[T] ? Model[T][U] : ['b1', never]
+                                         : ['b2', never])
+                                      : Arr extends [infer T, infer U, infer V]
+                                                        ? (T extends keyof Model
+                                                           ? U extends keyof Model[T]
+                                                           ? V extends keyof Model[T][U]
+                                                                           ? Model[T][U][V]
+                                                                           : ['c1', never]
+                                                           : ['c2', never]
+                                                           : ['c3', never])
+                                                        : ['d', never];
+
+function pathi<Target, Arr>(
+    path: Arr&([Target] extends [PathToType<Arr, Word>] ? (string | number)[] : never)) {
+  return path.join('.');
+}
+
 function path<Target, T extends keyof Word, U extends keyof Word[T] = never, V extends
                   keyof Word[T][U] = never, W extends keyof Word[T][U][V] = never,
                                                       X extends keyof Word[T][U][V][W] = never>(
