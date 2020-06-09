@@ -98,10 +98,11 @@ function path<Target,
               W extends keyof Word[T][U][V] = never,
               X extends keyof Word[T][U][V][W] = never>(
     dummy: Target,
-    t: T&(Target extends(Extract<X, string|number> extends never
-                         ? Extract<W, string|number> extends never
-                         ? Extract<V, string|number> extends never
-                         ? Extract<U, string|number> extends never ? Word[T] : Word[T][U]
+    t: T&(Target extends([X] extends [never]
+                         ? [W] extends [never]
+                         ? [V] extends [never]
+                         ? [U] extends [never]
+                         ? Word[T] : Word[T][U]
                          : Word[T][U][V]
                          : Word[T][U][V][W]
                          : Word[T][U][V][W][X])
@@ -159,11 +160,11 @@ It would be so much more ergonomic if I could instead do
 ```ts
 path<Props['sense']>('sense', 10)
 ```
-but that won't work because of a surprising constraint in TypeScript: that ***automatic inference of generics parameters is all-or-nothing***, per [niieani](https://stackoverflow.com/a/38688143/500207). I can't provide the first generic type without providing the rest (`T`, `U`, et al.). Subscribe to notifications for this ["Proposal: Partial Type Argument Inference"](https://github.com/Microsoft/TypeScript/issues/26242) issue to know when this constraint is relaxed.
+but that won't work because of a surprising constraint in TypeScript: that ***automatic inference of non-default generics parameters is all-or-nothing***, per [niieani](https://stackoverflow.com/a/38688143/500207). I can't provide the first generic type without providing the rest (`T`, `U`, et al.). Subscribe to notifications for this ["Proposal: Partial Type Argument Inference"](https://github.com/Microsoft/TypeScript/issues/26242) issue to know when this constraint is relaxed.
 
 > Generics in Java and C++ allow one to partially define generics/template parameters and infer the rest, but in those languages, generics are a mechanism for *code generation*: these compilers degenericize code by creating one function for each combination of generic types invoked. TypeScript's generics, like all other TypeScript functionality, are solely compile-time constraints. No extra JavaScript gets generated because `path` above is called with many different types.
 
-### `never` extends everything
+### Default generic parameters needed
 Recall the generic types that `path` uses:
 ```ts
 function path<Target,
@@ -173,9 +174,148 @@ function path<Target,
               W extends keyof Word[T][U][V] = never,
               X extends keyof Word[T][U][V][W] = never>(/* elided */) {/* elided */}
 ```
-It turns out to be crucial to specify all optional elements of the path (generic types `U` and higher) to default to `never`.
+It turns out to be crucial to specify all optional elements of the path (generic types `U` and higher) to default to `never`. 
 
-(to be continued)
+**If we omit defaults,** TypeScript will infer some types, but they were crazy—for `path({} as Sense, 'sense')`, it intfers the following for `U` and higher:
+- `U = 0`
+- `V = "partOfSpeech" | "appliesToKanji" | "appliesToKana" | "related" | "antonym" | "field" | "dialect" | "misc" | "info" | "languageSource" | "gloss"`
+- `U = number | ... 28 more ... | "values"`
+- `X = never`
+
+and naturally with these types inferred, the function doesn't typecheck, despite being valid.
+
+> Aside. I see the above list of inferred types when I hover over `path` in VS Code after removing default types.
+>
+> Aside the second. Generic parameter defaults were introduced in [2.3](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-3.html#generic-parameter-defaults) and its release notes describes them formally.
+
+**If we have TypeScript in `strict` mode,** it appears we can't really pick a default other than `never`. You might think `null` or `''` might serve as placeholders for "don't care" types but these aren't keys of the `Word` interface or most types it contains.
+
+So, with defaults for all optional generic parameters, TypeScript's inference will be guided by the arguments to `path`, and resulting generic parameters willform a path into the `Word` interface.
+
+## `never` extends everything
+With the elements of our path into the `Word` interface statically-typed, with defaults, and constrained to be descendent keys of `Word`, we're actually pretty close to a working `path`! One crucial obstacle is, how can we get the type at the end of the path? With that, we could require that `Target` extends it.
+
+Recall, here's the constraints we use to link `Target` and the type at the end of the path:
+```ts
+(Target extends([X] extends [never]
+                ? [W] extends [never]
+                ? [V] extends [never]
+                ? [U] extends [never]
+                ? Word[T] : Word[T][U]
+                : Word[T][U][V]
+                : Word[T][U][V][W]
+                : Word[T][U][V][W][X])
+                  ? string
+                  : never),
+```
+There's two pieces here: the big but lightweight piece is this ladder of ternaries, but the small but weighty piece is `[X] extends [never]`.
+
+> My second dissatisfaction with the `path` above is how it only works five levels deep. It is readily extended to deeper (or shallower) levels, by manually altering the ternary ladder above, but I wish there was a way to do this automatically.
+
+The ternary ladder lets us find the *last* level of the path the caller gave, i.e., in 
+```ts
+path({} as Props['sense'], 'sense', 10)
+```
+the path is `["sense", 10]` where `T="sense"` and `U=10`; `V` and the rest will be `never`. The ladder is asking,
+- is `X` `never`?
+  - yes
+- what about `W`?
+  - `never`
+- ok how about `V`, is it `never`?
+  - still the same
+- `U`?
+  - aha! Not `never`.
+
+Once it finds the end of the given path, it can get the type at the end of that path: it's `Word[T][U]`, i.e., `Word['sense'][10]`. With that in hand, it's straightforward to constrain `Target` to extend it (or vice versa, since we want the types to be equal).
+
+**However.** Testing for `never` can be tricky, in part because per the [`never` docs](https://www.typescriptlang.org/docs/handbook/basic-types.html#never), `never` extends (is assignable to) everything and is extended by nothing.
+```ts
+type NeverExtendsNever = never extends never ? 1 : 0;   // 1
+type NeverExtendsString = never extends string ? 1 : 0; // 1
+type StringExtendsNever = string extends never ? 1 : 0; // 0
+```
+So we know we can't do `never extends T`. But consider this:
+```ts
+type UExtendsNever<T, U = never> = U extends never ? [T] : [T, U];
+type UString = UExtendsNever<number, string>; // [number, string] ✅
+type UNever = UExtendsNever<number>;          // never??? ❌
+```
+We wanted `UNever` to be `[number]`! Why is it just flat out `never`?? Because, per [Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), `never` is not a naked type but rather an *empty union*. That is, just like
+- `type Union2 = number | string | never` turns into `number|string` and
+- `type Union1 = number | never` turns into `number`, inductively,
+- `type Union0 = never` represents the empty union, the union over no elements. 
+
+*Therefore*, per distributive conditional types (see [docs](https://www.typescriptlang.org/docs/handbook/advanced-types.html#distributive-conditional-types)), while
+- `U extends (number | string) ? Then : Else` expands to `(U extends number ? Then : Else) | (U extends string ? Then : Else)`, in contrast
+- `U extends never ? Then : Else` tries to distribute the conditional over the union, but there's nothing in the union, leaving us with `never`. 
+
+> In algebra, the equivalent would be multiplication distributing over addition: `c*(a+b) = c*a + c*b`, but if the sum (our union!) is empty, we get `c*(0) = 0`.
+>
+> An open question: does `never extends never` short-circuit the distribution?
+
+The following are two ways to properly check if the `never` default parameter was encountered:
+```ts
+// use tuples:
+type UExtendsNever2<T, U = never> = [U] extends [never] ? [T] : [T, U];
+type UString2 = UExtendsNever2<number, string>; // [number, string] ✅
+type UNever2 = UExtendsNever2<number>;          // [number] ✅
+
+// use Extract
+type UExtendsNever3<T, U = never> = Extract<U, any> extends never ? [T] : [T, U];
+type UString3 = UExtendsNever3<number, string>; // [number, string] ✅
+type UNever3 = UExtendsNever3<number>;          // [number] ✅
+```
+
+`Extract` was included in [2.8](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-8.html#predefined-conditional-types) as one of several helper types for conditional types, and it strips types from the left-hand argument that also exist in the right-hand argument—a set difference. It's not quite clear to me why this works: `Exclude<never, any>` results in `never`, but somehow that short-circuits the unwanted distribution that `never extends never` has?
+
+[Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), mentioned above, recommended the more compact solution of clothing the types involved into a tuple type, which also appears to prevent an unwanted distribution of the conditional.
+
+## Triggering a compiler error
+
+Finally, we need a way to cause trouble if the desired `Target` type isn't at the end of the path. Recall `path`'s function signature to see how this is done:
+```ts
+function path<Target,
+              T extends keyof Word,
+              U extends keyof Word[T] = never,
+              V extends keyof Word[T][U] = never,
+              W extends keyof Word[T][U][V] = never,
+              X extends keyof Word[T][U][V][W] = never>(
+    dummy: Target,
+    t: T&(Target extends([X] extends [never]
+                         ? [W] extends [never]
+                         ? [V] extends [never]
+                         ? [U] extends [never]
+                         ? Word[T] : Word[T][U]
+                         : Word[T][U][V]
+                         : Word[T][U][V][W]
+                         : Word[T][U][V][W][X])
+                            ? string
+                            : never),
+    u?: U,
+    v?: V,
+    w?: W,
+    x?: X,
+)
+```
+
+As detailed above,
+```ts
+path({} as Props['sense'], 'sense', 10)
+```
+results in generic parameters
+- `Target = Props['sense']`
+- `T = 'sense'`
+- `U = 10`
+- `V` etc. equal to `never`.
+
+The ladder of ternaries gives us the type at the end of the path, specifically, `Word['sense'][10]` and we check if `Target` extends it. 
+
+If it does, all is well: we harmlessly require the `t` argument to be of type `T&string`.
+
+But if if doesn't, we sabotage the entire function call by requiring `t` to have type `T&never`.
+
+This is somewhat non-ideal because the type error will complain about the `t` argument, instead of the actual argument that's causing a problem.
+
 
 ## Appendix
 ```ts
