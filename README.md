@@ -192,7 +192,7 @@ and naturally with these types inferred, the function doesn't typecheck, despite
 
 So, with defaults for all optional generic parameters, TypeScript's inference will be guided by the arguments to `path`, and resulting generic parameters willform a path into the `Word` interface.
 
-## `never` extends everything
+### `never` extends everything
 With the elements of our path into the `Word` interface statically-typed, with defaults, and constrained to be descendent keys of `Word`, we're actually pretty close to a working `path`! One crucial obstacle is, how can we get the type at the end of the path? With that, we could require that `Target` extends it.
 
 Recall, here's the constraints we use to link `Target` and the type at the end of the path:
@@ -270,7 +270,7 @@ type UNever3 = UExtendsNever3<number>;          // [number] ✅
 
 [Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), mentioned above, recommended the more compact solution of clothing the types involved into a tuple type, which also appears to prevent an unwanted distribution of the conditional.
 
-## Triggering a compiler error
+### Triggering a compiler error
 
 Finally, we need a way to cause trouble if the desired `Target` type isn't at the end of the path. Recall `path`'s function signature to see how this is done:
 ```ts
@@ -314,42 +314,41 @@ If it does, all is well: we harmlessly require the `t` argument to be of type `T
 
 But if if doesn't, we sabotage the entire function call by requiring `t` to have type `T&never`.
 
-This is somewhat non-ideal because the type error will complain about the `t` argument, instead of the actual argument that's causing a problem.
-
-
-## Appendix
+This is non-ideal because the type error will point to the `t` argument, instead of the actual argument that's causing a problem. My attempts at making this more ergonomic have thus far been resisted. I first tried introducing a new template parameter, something like `Check` in 
 ```ts
+function path3<Target,
+               T extends keyof Word,
+               U extends keyof Word[T] = never,
+               V extends keyof Word[T][U] = never,
+               W extends keyof Word[T][U][V] = never,
+               X extends keyof Word[T][U][V][W] = never,
+               Check = (Target extends([X] extends [never] ? [W] extends [never] ? [V] extends [never]
+                                       ? [U] extends [never] ? Word[T] : Word[T][U]
+                                       : Word[T][U][V]
+                                       : Word[T][U][V][W]
+                                       : Word[T][U][V][W][X])
+                                         ? (string|number)
+                                         : never)>(    
+    dummy: Target,
+    t: T&Check,
+    u?: U&Check,
+    v?: V&Check,
+    w?: W&Check,
+    x?: X&Check,
+) {/* elided */}
+```
+but this backfired by confusing the generic type inference. With the above, `path({} as Props['sense'], 'sense', 10)` fails to typecheck because TypeScript incorrectly infers `U` to have type `never`, instead of `10` or `number`. I then tried duplicating the ternary ladder and the constraint on `Target` to each of the arguments (not just `T`), which completely destroyed what readability it had, but this doesn't really help because the `t` argument still gets underlined, not necessarily the argument that's actually causing the problem.
 
-// DEBUG!
-type PathDebug<Target, T extends keyof Word, U extends keyof Word[T] = never, V extends
-                   keyof Word[T][U] = never, W extends keyof Word[T][U][V] = never,
-                                                       X extends keyof Word[T][U][V][W] = never> =
-    [
-      (Extract<X, string|number> extends never ? Extract<W, string|number> extends never
-       ? Extract<V, string|number> extends never
-       ? Extract<U, string|number> extends never ? Word[T] : Word[T][U]
-       : Word[T][U][V]
-       : Word[T][U][V][W]
-       : Word[T][U][V][W][X]),
-    ];
-type foo = PathDebug<Props['sense'], 'sense', never, never, never, never>;
-type foo2 = PathDebug<Props['sense'], 'id', never, never, never, never>;
-type bar = never extends Props['sense'] ? 1 : 0;
-type bar2 = Props['sense'] extends never ? 1 : 0;
+So this infelicity is the third thing I don't like about `path`:
+1. having to pass in a dummy variable as the first argument so the `Target` type can be inferred;
+2. having to manually extend it to work past five levels; and
+3. the type error isn't localized.
 
-type q = 'id' extends string ? 1 : 0;                            // 1
-type q2 = string extends 'id' ? 1 : 0;                           // 0
-type q3 = never extends(string|number) ? 1 : 0;                  // 1
-type q4 = never extends never ? 1 : 0;                           // 1
-type q5 = (string|number) extends never ? 1 : 0;                 // 0
-type q6 = (string|number) extends 'id' ? 1 : 0;                  // 0 :(
-type q7 = Extract<string, 'id'>;                                 // never
-type q7b = Extract<'id', string|number>;                         // id!!!!!!!!!!!!!!!!!!!!!!!!!
-type q7c = Extract<never, string|number>;                        // never
-type q7b2 = Extract<'id', string|number> extends never ? 1 : 0;  // 0
-type q7c2 = Extract<never, string|number> extends never ? 1 : 0; // 1
-
-type q8 = Extract<never, string>; // never
-type q9 = NonNullable<never>;     // never
-type q10 = NonNullable<string>;   // string
+## Alternatives
+Here I'll sketch one alternative way to achieve the same goal as `path`. Recall we had this:
+```ts
+export const propsPaths: AllValuesString<Props> = {
+  sense: path({} as Props['sense'], 'sense', 10),
+  lang: path({} as Props['lang'], 'sense', 10, 'gloss', 40, 'lang'),
+};
 ```
