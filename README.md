@@ -164,7 +164,7 @@ In contrast, when the TypeScript compiler encounters type annotations in `9000 a
 This fundamental point threads its way through much of the subsequent discussion so I mention it here.
 
 ### All-or-nothing generics parameter inference
-My only complaint about my `path` above (🍌) is that I have to give it a dummy unused variable to indicate the type I wanted at the end of the path, i.e., the `{} as Props['sense']` first argument in
+My first complaint about my `path` above (🍌) is that I have to give it a dummy unused variable to indicate the type I wanted at the end of the path, i.e., the `{} as Props['sense']` first argument in
 ```ts
 path({} as Props['sense'], 'sense', 10)
 ```
@@ -172,7 +172,7 @@ It would be so much more ergonomic if I could instead do
 ```ts
 path<Props['sense']>('sense', 10)
 ```
-but that won't work because of a surprising constraint in TypeScript: that ***automatic inference of non-default generics parameters is all-or-nothing***, per [niieani](https://stackoverflow.com/a/38688143/500207). I can't provide the first generic type without providing the rest (`T`, `U`, et al.). Subscribe to notifications for this ["Proposal: Partial Type Argument Inference"](https://github.com/Microsoft/TypeScript/issues/26242) issue to know when this constraint is relaxed.
+but that won't work because of a surprising constraint in TypeScript: that *automatic inference of non-default generics parameters is all-or-nothing*, per [niieani](https://stackoverflow.com/a/38688143/500207). I can't provide the first generic type without providing the rest (`T`, `U`, et al.). Subscribe to notifications for this ["Proposal: Partial Type Argument Inference"](https://github.com/Microsoft/TypeScript/issues/26242) issue to know when this constraint is relaxed.
 
 > Generics in Java and C++ allow one to partially define generics/template parameters and infer the rest, but in those languages, generics are a mechanism for *code generation*: these compilers degenericize code by creating one function for each combination of generic types invoked. TypeScript's generics, like all other TypeScript functionality, are solely compile-time constraints. No extra JavaScript gets generated because `path` above is called with many different types.
 
