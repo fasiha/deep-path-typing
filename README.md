@@ -9,6 +9,7 @@
     - [Default generic parameters needed](#default-generic-parameters-needed)
     - [`never` extends everything](#never-extends-everything)
     - [Triggering a compiler error](#triggering-a-compiler-error)
+    - [Summary of drawbacks](#summary-of-drawbacks)
   - [Alternatives](#alternatives)
 
 ## Goal
@@ -350,12 +351,13 @@ function path3<Target,
 ```
 but this backfired by confusing the generic type inference. With the above, `path({} as Props['sense'], 'sense', 10)` fails to typecheck because TypeScript incorrectly infers `U` to have type `never`, instead of `10` or `number`. I then tried duplicating the ternary ladder and the constraint on `Target` to each of the arguments (not just `T`), which completely destroyed what readability it had, but this doesn't really help because the `t` argument still gets underlined, not necessarily the argument that's actually causing the problem.
 
+### Summary of drawbacks
 So this infelicity is the third thing I don't like about `path`. There are the drawbacks so far, along with a couple more:
 1. having to pass in a dummy variable as the first argument so the `Target` type can be inferred;
 2. having to manually extend it to work past five levels; and
 3. the type error isn't localized.
 4. Note that `Word` has to be hardcoded into `path`. It's not clear how to genericize that without running into the all-or-nothing requirement for TypeScript generic type inference.
-5. A more holistic problem is that we write the following
+5. A more holistic problem is that when we write the following:
 ```ts
 export const propsPaths: AllValuesString<Props> = {
   sense: path({} as Props['sense'], 'sense', 10),
