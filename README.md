@@ -188,7 +188,7 @@ function path<Target,
 ```
 It turns out to be crucial to specify all optional elements of the path (generic types `U` and higher) to default to `never`. 
 
-**If we omit defaults,** TypeScript will infer some types, but they were crazy—for `path({} as Sense, 'sense')`, it intfers the following for `U` and higher:
+**If we omit defaults,** TypeScript will infer some types, but they were crazy—for `path({} as Sense, 'sense')`, it infers the following for `U` and higher:
 - `U = 0`
 - `V = "partOfSpeech" | "appliesToKanji" | "appliesToKana" | "related" | "antonym" | "field" | "dialect" | "misc" | "info" | "languageSource" | "gloss"`
 - `U = number | ... 28 more ... | "values"`
@@ -207,7 +207,7 @@ So, with defaults for all optional generic parameters, TypeScript's inference wi
 ### `never` extends everything
 With the elements of our path into the `Word` interface statically-typed, with defaults, and constrained to be descendent keys of `Word`, we're actually pretty close to a working `path`! One crucial obstacle is, how can we get the type at the end of the path? With that, we could require that `Target` extends it.
 
-Recall, here's the constraints we use to link `Target` and the type at the end of the path:
+Recall, here are the constraints we use to link `Target` and the type at the end of the path:
 ```ts
 (Target extends([X] extends [never]
                 ? [W] extends [never]
@@ -254,7 +254,7 @@ type UNever = UExtendsNever<number>;          // never??? ❌
 ```
 We wanted `UNever` to be `[number]`! Why is it just flat out `never`?? Because, per [Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), `never` is not a naked type but rather an *empty union*. That is, just like
 - `type Union2 = number | string | never` turns into `number|string` and
-- `type Union1 = number | never` turns into `number`, inductively,
+- `type Union1 = number | never` turns into `number`, then inductively,
 - `type Union0 = never` represents the empty union, the union over no elements. 
 
 *Therefore*, per distributive conditional types (see [docs](https://www.typescriptlang.org/docs/handbook/advanced-types.html#distributive-conditional-types)), while
@@ -272,15 +272,15 @@ type UExtendsNever2<T, U = never> = [U] extends [never] ? [T] : [T, U];
 type UString2 = UExtendsNever2<number, string>; // [number, string] ✅
 type UNever2 = UExtendsNever2<number>;          // [number] ✅
 
-// use Extract
+// use `Extract`:
 type UExtendsNever3<T, U = never> = Extract<U, any> extends never ? [T] : [T, U];
 type UString3 = UExtendsNever3<number, string>; // [number, string] ✅
 type UNever3 = UExtendsNever3<number>;          // [number] ✅
 ```
 
-`Extract` was included in [2.8](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-8.html#predefined-conditional-types) as one of several helper types for conditional types, and it strips types from the left-hand argument that also exist in the right-hand argument—a set difference. It's not quite clear to me why this works: `Exclude<never, any>` results in `never`, but somehow that short-circuits the unwanted distribution that `never extends never` has?
+`Extract` was included in [2.8](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-8.html#predefined-conditional-types) as one of several helper types for conditional types, and it strips types from the left-hand argument that also exist in the right-hand argument—a set difference. It's not *quite* clear to me why this works: `Extract<never, any>` results in `never` while `Extract<number, any>` in `number`, but somehow `Extract`'s presence prevents the unwanted distribution that `U extends never` has.
 
-[Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), mentioned above, recommended the more compact solution of clothing the types involved into a tuple type, which also appears to prevent an unwanted distribution of the conditional.
+Meanwhile, [Nurbol Alpysbayev](https://stackoverflow.com/a/53984913/500207), mentioned above, recommended the more compact solution of clothing the types involved into a tuple type, which also appears to prevent an unwanted distribution of the conditional.
 
 ### Triggering a compiler error
 
