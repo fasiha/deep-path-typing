@@ -339,11 +339,12 @@ function path3<Target,
 ```
 but this backfired by confusing the generic type inference. With the above, `path({} as Props['sense'], 'sense', 10)` fails to typecheck because TypeScript incorrectly infers `U` to have type `never`, instead of `10` or `number`. I then tried duplicating the ternary ladder and the constraint on `Target` to each of the arguments (not just `T`), which completely destroyed what readability it had, but this doesn't really help because the `t` argument still gets underlined, not necessarily the argument that's actually causing the problem.
 
-So this infelicity is the third thing I don't like about `path`:
+So this infelicity is the third thing I don't like about `path`. There are the drawbacks so far, along with a couple more:
 1. having to pass in a dummy variable as the first argument so the `Target` type can be inferred;
 2. having to manually extend it to work past five levels; and
 3. the type error isn't localized.
-4. A more holistic problem is that we write the following
+4. Note that `Word` has to be hardcoded into `path`. It's not clear how to genericize that without running into the all-or-nothing requirement for TypeScript generic type inference.
+5. A more holistic problem is that we write the following
 ```ts
 export const propsPaths: AllValuesString<Props> = {
   sense: path({} as Props['sense'], 'sense', 10),
@@ -411,12 +412,34 @@ type PathToType<Arr, Model> =
         : Arr extends [infer T, infer U, infer V, infer W]
           ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : never : never : never : never)
           : Arr extends [infer T, infer U, infer V, infer W, infer X]
-            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:never : never : never : never : never)
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X] : never : never : never : never : never)
             : never;
+```
+[2.8](https://www.staging-typescript.org/docs/handbook/release-notes/typescript-2-8.html#type-inference-in-conditional-types) introduced `infer`, but I didn't quite understand what they did until I began cobbling together the above. [ford04](https://stackoverflow.com/a/60067851/500207)'s comment, that `infer` introduces a new type variable on the "right-hand side" of a generic declaration, i.e., outside the `<>`, helped. Here's a toy example—
+```ts
+type Len<T> =
+    T extends [] 
+      ? 0 
+      : T extends [infer U]
+        ? 1 
+        : T extends [infer U, infer U] 
+          ? 2 
+          : 'lots';
+type len1 = Len<['hi']>;                    // 1
+type len2 = Len<[number, string, boolean]>; // "lots"
+```
+Usable inside the `extends` clause of a conditional type, `infer` asks if TypeScript can fit a type there, and if so, do something with it; otherwise, do something else.
 
-// Helper type to debug
-type par = PathToType2<Writeable<typeof path2>, Word>;
-type PathToType2<Arr, Model> =
+This is used in `PathToTarget` above 🍓, where we search for the length of the `Arr` path type provided. I.e., if TypeScript can infer all three parameters in `Arr extends [infer T, infer U, infer V]`, then we know we're dealing with a 3-element path array. All that remains is to confirm that `T`, `U`, and `V` are indeed (sub)-keys of `Word` (or any arbitrary `Model` type).
+
+I actually wrote `PathToTarget` manually above, which is very error-prone. The following debug helper replaces `never` with more specific return types to help identify where something was going awry.
+```ts
+type debug1 = PathToTypeDebug<['sense', 40, 'gloss', 10, 'lang'], Word>;     // string
+type debug2 = PathToTypeDebug<['sense', 40, 'gloss', 10, '❌'], Word>;       // 'e1'
+type debug3 = PathToTypeDebug<['sense', '❌', 'gloss', 10, 'lang'], Word>;   // 'e4'
+type debug4 = PathToTypeDebug<[], Word>;                                     // 'f'
+
+type PathToTypeDebug<Arr, Model> =
     Arr extends [infer T]
     ? (T extends keyof Model ? Model[T] : 'a1')
     : Arr extends [infer T, infer U]
@@ -426,6 +449,8 @@ type PathToType2<Arr, Model> =
         : Arr extends [infer T, infer U, infer V, infer W]
           ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? Model[T][U][V][W] : 'd1' : 'd2' : 'd3' : 'd4')
           : Arr extends [infer T, infer U, infer V, infer W, infer X]
-            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X]:'e1' : 'e2' : 'e3' : 'e4' : 'e5')
+            ? (T extends keyof Model ? U extends keyof Model[T] ? V extends keyof Model[T][U] ? W extends keyof Model[T][U][V] ? X extends keyof Model[T][U][V][W] ? Model[T][U][V][W][X] : 'e1' : 'e2' : 'e3' : 'e4' : 'e5')
             : 'f';
 ```
+
+While this was an interesting detour, I'm much happier with `path` 🍌, despite its shortcomings. If you have suggestions or comments, please [get in touch](https://fasiha.github.io/#contact)!
