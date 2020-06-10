@@ -1,5 +1,16 @@
 # Ensuring that reaching into a deeply-nested interface yields the right type—a TypeScript generics miniboss
 
+- [Ensuring that reaching into a deeply-nested interface yields the right type—a TypeScript generics miniboss](#ensuring-that-reaching-into-a-deeply-nested-interface-yields-the-right-typea-typescript-generics-miniboss)
+  - [Goal](#goal)
+  - [Result](#result)
+  - [Discussion](#discussion)
+    - [TypeScript self-erasure](#typescript-self-erasure)
+    - [All-or-nothing generics parameter inference](#all-or-nothing-generics-parameter-inference)
+    - [Default generic parameters needed](#default-generic-parameters-needed)
+    - [`never` extends everything](#never-extends-everything)
+    - [Triggering a compiler error](#triggering-a-compiler-error)
+  - [Alternatives](#alternatives)
+
 ## Goal
 
 To start out, consider a deeply-nested data modeling interface that many projects have. This is is [my](https://github.com/fasiha/jmdict-simplified-node) TypeScript model of the [JMDict-simplified](https://github.com/scriptin/jmdict-simplified) data representing a Japanese-to-English dictionary.
@@ -295,7 +306,7 @@ function path<Target,
     v?: V,
     w?: W,
     x?: X,
-)
+) {/* elided */}
 ```
 
 As detailed above,
